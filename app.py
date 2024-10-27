@@ -6,7 +6,7 @@ from rich import print
 from pvrecorder import PvRecorder
 from gradio_client import Client
 
-from chat_gpt import ChatManager
+from open_ai import ChatManager
 from elevenlabs_tts import ElevanLabsManager
 
 isFinished = True

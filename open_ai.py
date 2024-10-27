@@ -4,7 +4,7 @@ import tiktoken
 import os
 from rich import print
 
-def num_tokens_from_messages(messages, model='gpt-4'):
+def num_tokens_from_messages(messages, model='gpt-4o'):
   """Returns the number of tokens used by a list of messages."""
   try:
       encoding = tiktoken.encoding_for_model(model)
@@ -29,13 +29,13 @@ class ChatManager:
         except TypeError:
             print("[red] Open Ai api is not present in system environment variables")
 
-    def chat(self, prompt=""):
+    def chat(self, prompt="", model="gpt-4o"):
         self.chat_history.append({"role": "user", "content": prompt})
         print(f"[green]Chat History has a current token length of {num_tokens_from_messages(self.chat_history)}")
 
         while num_tokens_from_messages(self.chat_history) > 128000:
             self.chat_history.pop(1)
-        completion = self.client.chat.completions.create(model="gpt-4o", messages=self.chat_history)
+        completion = self.client.chat.completions.create(model=model, messages=self.chat_history)
 
         self.chat_history.append({"role": completion.choices[0].message.role, "content": completion.choices[0].message.content})
 
@@ -44,7 +44,23 @@ class ChatManager:
         print(f"[yellow] Chat GPT Response: \n\n {openai_response} \n")
 
         return openai_response
-        
+
+def transcribe_audio_to_text(audio_path: str = None, audio: bytes = None):
+
+    if audio_path is None and audio is None:
+        raise ValueError("audio_path or audio must be provided")
+    elif audio_path is not None and audio is not None:
+        raise ValueError("audio_path and audio cannot both be provided")
+    elif audio_path is not None:
+        with open(audio_path, "rb") as audio_file:
+            transcription = OpenAI.audio.transcriptions.create(model="whisper-1", file=audio_file)
+            return transcription.text
+    else:
+        transcription = OpenAI.audio.transcriptions.create(model="whisper-1", file=audio)
+        return transcription.text
+
+
+
 if __name__ == "__main__":
     openai_manager = ChatManager()
     try:
