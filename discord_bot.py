@@ -1,11 +1,11 @@
 import os
 from dotenv import load_dotenv
+from rich import print
 import discord
-
+from custom_sink import CustomSink
 from open_ai import ChatManager, transcribe_audio_to_text
 from elevenlabs_tts import ElevanLabsManager
-from recorder import VoiceRecorder
-
+import asyncio
 load_dotenv()
 
 chatgpt_manager = ChatManager()
@@ -16,6 +16,7 @@ intents.message_content = True
 intents.guilds= True
 
 client = discord.Bot(intents=intents)
+sink = CustomSink()
 
 connections = {}
 
@@ -45,7 +46,8 @@ async def chat(ctx: discord.ApplicationContext, prompt:str):
     """Kirim Pesan yang nantinya akan di respon oleh bot"""
     await ctx.response.defer()
     chatgpt_response = chatgpt_manager.chat(prompt, model="gpt-4o-mini")
-    await ctx.followup.send(f"Prompt: {prompt} \n\n Kyoko Kirigiri : {chatgpt_response}")
+    await ctx.followup.send(f"Prompt: {prompt}")
+    await ctx.channel.send(f"{chatgpt_response}")
 
 @client.slash_command(
     name="join",
@@ -63,10 +65,10 @@ async def join(ctx: discord.ApplicationContext):
         await connections[ctx.guild_id].move_to(voice.channel)
         await ctx.respond(f"Bot pindah ke {voice.channel}")
     else:
-        vc = await voice.channel.connect(cls=VoiceRecorder)
+        vc = await voice.channel.connect()
         await ctx.respond(f"Bot masuk ke {voice.channel}")
+        connections.update({ctx.guild_id: vc})
 
-    connections.update({ctx.guild_id: vc})
 
 @client.slash_command(
     name="leave",
@@ -80,8 +82,7 @@ async def leave(ctx: discord.ApplicationContext):
     else:    
         await connections[ctx.guild_id].disconnect()
         await ctx.respond("Bot keluar dari voice channel")
-    
-    connections.pop(ctx.guild_id)
+        connections.pop(ctx.guild_id)
 
 @client.slash_command(
     name="talk",
@@ -89,10 +90,20 @@ async def leave(ctx: discord.ApplicationContext):
     guild_ids=["656470157874692106"]
 )
 async def talk(ctx: discord.ApplicationContext):
-    vc = connections.get(ctx.guild_id)
-    if isinstance(vc, VoiceRecorder):
-        await vc.start_recording()
-        await ctx.respond("Mulai Mendengarkan!")
+    global sink
+
+    if sink.finished:
+        sink = sink.reset()
+
+    voice = ctx.author.voice
+    vc: discord.VoiceClient = ctx.voice_client
+
+    if ctx.guild_id not in connections:
+        vc = await voice.channel.connect()
+        connections.update({ctx.guild_id: vc})
+
+    vc.start_recording(sink, callback, ctx.channel, vc)
+    await ctx.respond("Mulai mendengarkan!")
 
 @client.slash_command(
     name="stop",
@@ -100,10 +111,39 @@ async def talk(ctx: discord.ApplicationContext):
     guild_ids=["656470157874692106"]
 )
 async def stop(ctx: discord.ApplicationContext):
-    vc = connections.get(ctx.guild_id)
-    if isinstance(vc, VoiceRecorder):
-        await vc.stop_recording()
-        await ctx.respond("Stop Mendengarkan!")
+    vc: discord.VoiceClient = ctx.voice_client
 
+    if not vc:
+        await ctx.respond("Bot sedang tidak mendengarkan")
+        return
+    else:
+        vc.stop_recording()
+        await ctx.respond("Berhenti mendengarkan!")
+
+async def callback(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
+    recorded_users = [f"<@{user_id}>" for user_id, audio in sink.audio_data.items()]
+
+    await channel.send(
+        f"Selesai merekam user {', '.join(recorded_users)}."
+    )
+    vc: discord.VoiceClient = args[0]
+    
+    transcription_result = transcribe_audio_to_text(audio_path='audio/recording.wav', model="gpt-4o-transcribe")
+    
+    print(f"[green]Transcription Result: {transcription_result}")
+    
+    chatgpt_response = chatgpt_manager.chat(transcription_result, model="gpt-4o-mini")
+    audio = elevenlabs_manager.text_to_speech(chatgpt_response)
+
+    audio_bytes = b''.join(audio)
+    
+    os.makedirs('audio', exist_ok=True)
+    
+    temp_file = 'audio/response.mp3'
+    with open(temp_file, 'wb') as f:
+        f.write(audio_bytes)
+    
+    source = discord.FFmpegPCMAudio(temp_file)
+    vc.play(source, after=lambda e: print(f"Finished playing: {e}"))
 
 client.run(os.environ['kyoko_key'])

@@ -2,3 +2,4 @@
 /__pycache__
 audio.wav
 recording.wav
+audio/*

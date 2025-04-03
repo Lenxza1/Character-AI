@@ -3,6 +3,9 @@ from openai import OpenAI
 import tiktoken
 import os
 from rich import print
+from typing import Literal
+
+client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
 
 def num_tokens_from_messages(messages, model='gpt-4o'):
   """Returns the number of tokens used by a list of messages."""
@@ -45,7 +48,7 @@ class ChatManager:
 
         return openai_response
 
-def transcribe_audio_to_text(audio_path: str = None, audio: bytes = None):
+def transcribe_audio_to_text(audio_path: str = None, audio: bytes = None, language: str = "id", model: Literal["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"] = "whisper-1"):
 
     if audio_path is None and audio is None:
         raise ValueError("audio_path or audio must be provided")
@@ -53,11 +56,12 @@ def transcribe_audio_to_text(audio_path: str = None, audio: bytes = None):
         raise ValueError("audio_path and audio cannot both be provided")
     elif audio_path is not None:
         with open(audio_path, "rb") as audio_file:
-            transcription = OpenAI.audio.transcriptions.create(model="whisper-1", file=audio_file)
-            return transcription.text
+            transcription = client.audio.transcriptions.create(model=model, file=audio_file, response_format="text", language=language)
+            return transcription
     else:
-        transcription = OpenAI.audio.transcriptions.create(model="whisper-1", file=audio)
-        return transcription.text
+        transcription = client.audio.transcriptions.create(model=model, file=audio, response_format="text", language=language)
+        return transcription
+            
 
 
 
