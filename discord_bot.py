@@ -5,7 +5,6 @@ import discord
 from custom_sink import CustomSink
 from open_ai import ChatManager, transcribe_audio_to_text
 from elevenlabs_tts import ElevanLabsManager
-import asyncio
 load_dotenv()
 
 chatgpt_manager = ChatManager()
